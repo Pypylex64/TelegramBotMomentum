@@ -1,0 +1,3 @@
+TOKEN = '1047679682:AAHplIyGDw0RFkbFtMtwFlYk9uvNhN9ifKA'
+APP_NAME = 'momenttelebotpy'
+CHAT_ID_ADMIN = 879223218
