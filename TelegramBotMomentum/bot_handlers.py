@@ -1,8 +1,7 @@
 from bot import bot 
 from messages import * 
-from db import users_db 
+from db import users_db, client
 from telebot import types
-from threading import Thread
 from config import CHAT_ID_ADMIN
 
 
@@ -14,13 +13,13 @@ def start_bot(message):
         
         # Приветствие и запрос имени
         bot.send_message(message.chat.id, HELLO)
-        msg = bot.send_message(message.chat.id, NAME)
+        bot.send_message(message.chat.id, NAME)
         
         # Следующий шаг - функция 
-        bot.register_next_step_handler(msg, get_name)
+        bot.register_next_step_handler(message, get_name)
     else:
-        msg = bot.send_message(message.chat.id, BACK)
-        bot.register_next_step_handler(msg, keyboard_main_menu)
+        bot.send_message(message.chat.id, BACK)
+        bot.register_next_step_handler(message, keyboard_main_menu)
 
 
 def get_name(message):
@@ -39,10 +38,10 @@ def get_name(message):
     button_g = types.KeyboardButton("Ж")
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     markup.row(button_g, button_m)
-    msg = bot.send_message(message.chat.id, GENDER, reply_markup=markup)
+    bot.send_message(message.chat.id, GENDER, reply_markup=markup)
 
     # Передаем задачу следующей функции
-    bot.register_next_step_handler(msg, get_gender)
+    bot.register_next_step_handler(message, get_gender)
 
 
 def get_gender(message):
@@ -51,8 +50,8 @@ def get_gender(message):
     users_db.update({"chat_id": message.chat.id}, {"$set": {"gender": user_gender}})
 
     # Вопрос о возрасте
-    msg = bot.send_message(message.chat.id, AGE)
-    bot.register_next_step_handler(msg, get_age)
+    bot.send_message(message.chat.id, AGE)
+    bot.register_next_step_handler(message, get_age)
 
 
 def get_age(message):
@@ -60,14 +59,14 @@ def get_age(message):
     try:
         user_age = int(message.text)
         users_db.update({"chat_id": message.chat.id}, {"$set": {"age": user_age}})
+        bot.send_message(message.chat.id, END)
     except TypeError:
-        # Просим ввести корректный возраст
+        # Выводим сообщение об ошибке
         bot.send_message(message.chat.id, ERROR_AGE)
-    else:
-        msg = bot.send_message(message.chat.id, END)
         
-        # Показываем главное меню
-        bot.register_next_step_handler(msg, keyboard_main_menu)
+    
+    # Показываем главное меню
+    bot.register_next_step_handler(message, keyboard_main_menu)
 
 
 def keyboard_main_menu(message):
@@ -85,12 +84,10 @@ def keyboard_main_menu(message):
         button_mailing = types.KeyboardButton("Рассылка")
         keyboard_main.add(button_mailing)
         
-    msg = bot.send_message(message.chat.id, KEYBOARD, reply_markup=keyboard_main)
-
-    # Обрабатываем события
-    bot.register_next_step_handler(msg, main_menu)
+    bot.send_message(message.chat.id, KEYBOARD, reply_markup=keyboard_main)
 
 
+@bot.message_handler(content_types=['text'])
 def main_menu(message):
     "Обрабатываем ответы на нажатие кнопок"
     button_message = str(message.text)
@@ -101,10 +98,10 @@ def main_menu(message):
     keyboard_back.add(back_button)
     
     if button_message.lower() == "изменить имя":
-        msg = bot.send_message(message.chat.id, NAME, reply_markup=keyboard_back)
+        bot.send_message(message.chat.id, NAME, reply_markup=keyboard_back)
 
         # Обрабатываем событие change_name 
-        bot.register_next_step_handler(msg, change_name)
+        bot.register_next_step_handler(message, change_name)
         
     if button_message.lower() == "изменить пол": 
         # Задаем вопрос о смене гендера
@@ -113,24 +110,28 @@ def main_menu(message):
         markup_gender = types.ReplyKeyboardMarkup(resize_keyboard=True)
         markup_gender.row(button_g, button_m, back_button)
         
-        msg = bot.send_message(message.chat.id, GENDER, reply_markup=markup_gender)
+        bot.send_message(message.chat.id, GENDER, reply_markup=markup_gender)
         
         # Обрабатываем событие change_gender 
-        bot.register_next_step_handler(msg, change_gender)
+        bot.register_next_step_handler(message, change_gender)
         
     if button_message.lower() == "изменить возраст":
         # Задаем вопрос о смене возрасте
-        msg = bot.send_message(message.chat.id, AGE, reply_markup=keyboard_back)
+        bot.send_message(message.chat.id, AGE, reply_markup=keyboard_back)
 
         # Обрабатываем событие change_age
-        bot.register_next_step_handler(msg, change_age)
+        bot.register_next_step_handler(message, change_age)
 
     if button_message.lower() == "рассылка":
         # Принимаем сообщение которое надо разослать
-        msg = bot.send_message(message.chat.id, ADMIN, reply_markup=keyboard_back)
+        bot.send_message(message.chat.id, ADMIN, reply_markup=keyboard_back)
 
         # Обрабатываем событие send_message_to_all_users
-        bot.register_next_step_handler(msg, send_message_to_all_users)
+        bot.register_next_step_handler(message, send_message_to_all_users)
+
+    else:
+        # Возвращаем меню при любом тексте
+        bot.register_next_step_handler(message, start_bot)
 
 
 def change_name(message):
@@ -138,50 +139,52 @@ def change_name(message):
     message_str = str(message.text)
     if message_str.lower() == 'назад':
         # Не забываем про кнопку назад
-        msg = bot.send_message(message.chat.id, BACK)
-        bot.register_next_step_handler(msg, keyboard_main_menu)
+        bot.send_message(message.chat.id, BACK)
+        bot.register_next_step_handler(message, keyboard_main_menu)
         
     else:
         # Сохраняем имя 
         message_str = message_str.title()
         users_db.update({"chat_id": message.chat.id}, {"$set": {"name": message_str}})
-        msg = bot.send_message(message.chat.id, CORECT_NAME)
-        bot.register_next_step_handler(msg, keyboard_main_menu)
+        bot.send_message(message.chat.id, CORECT_NAME)
+        bot.register_next_step_handler(message, keyboard_main_menu)
 
 
 def change_gender(message):
     "Меняет пол и/или возвращает на главное меню"
     message_str = str(message.text)
     if message_str.lower() == 'назад':
-        msg = bot.send_message(message.chat.id, BACK)
-        bot.register_next_step_handler(msg, keyboard_main_menu)
+        bot.send_message(message.chat.id, BACK)
+        bot.register_next_step_handler(message, keyboard_main_menu)
     else:
         users_db.update({"chat_id": message.chat.id}, {"$set": {"gender": message_str}})
-        msg = bot.send_message(message.chat.id, CORECT_GENDER)
-        bot.register_next_step_handler(msg, keyboard_main_menu)
+        bot.send_message(message.chat.id, CORECT_GENDER)
+        bot.register_next_step_handler(message, keyboard_main_menu)
 
 
 def change_age(message):
     "Меняет возраст и/или возвращает на главное меню"
     message_str = str(message.text)
     if message_str.lower() == 'назад':
-        msg = bot.send_message(message.chat.id, BACK)
-        bot.register_next_step_handler(msg, keyboard_main_menu)
+        bot.send_message(message.chat.id, BACK)
+        bot.register_next_step_handler(message, keyboard_main_menu)
     else:
         try:
+            user = users_db.find_one({"chat_id": message.chat.id})
             message_int = int(message_str)
-            if message_int != users_db.find_one({"chat_id": message.chat.id}):
+            if message_int != user["age"]:
                 users_db.update({"chat_id": message.chat.id}, {"$set": {"age": message_int}})
                 
                 # Показываем главное меню
-                msg = bot.send_message(message.chat.id, AGE_CORECT)
-                bot.register_next_step_handler(msg, keyboard_main_menu)
+                bot.send_message(message.chat.id, AGE_CORECT)
+                bot.register_next_step_handler(message, keyboard_main_menu)
             else:
                 bot.send_message(message.chat.id, AGE_REPEAT)
+                bot.register_next_step_handler(message, keyboard_main_menu)
         except TypeError:
             # Просим ввести корректное возраст
-            msg = bot.send_message(message.chat.id, ERROR_AGE)
-            bot.register_next_step_handler(msg, keyboard_main_menu)
+            bot.send_message(message.chat.id, ERROR_AGE)
+            bot.register_next_step_handler(message, keyboard_main_menu)
 
 
 def send_message_to_all_users(message):
@@ -189,8 +192,8 @@ def send_message_to_all_users(message):
    message_admin = str(message.text)
    if message_admin.lower() == 'назад':
         # Не забываем про кнопку назад
-        msg = bot.send_message(message.chat.id, BACK)
-        bot.register_next_step_handler(msg, keyboard_main_menu)
+        bot.send_message(message.chat.id, BACK)
+        bot.register_next_step_handler(message, keyboard_main_menu)
    if message_admin != '':
        # Перебираем всех пользователей в бд
        for user in users_db.find():
@@ -199,14 +202,14 @@ def send_message_to_all_users(message):
                bot.send_message(user['chat_id'], message_admin)
                
                # Возвращаемся в главное меню
-               msg = bot.send_message(message.chat.id, MAILING)
-               bot.register_next_step_handler(msg, keyboard_main_menu)
+               bot.send_message(message.chat.id, MAILING)
+               bot.register_next_step_handler(message, keyboard_main_menu)
            except Exception as e:
                print('Error mail')
                
                # Возвращаемся в главное меню
-               msg = bot.send_message(message.chat.id, MAILING)
-               bot.register_next_step_handler(msg, keyboard_main_menu)
+               bot.send_message(message.chat.id, MAILING)
+               bot.register_next_step_handler(message, keyboard_main_menu)
 
 
 if __name__ == '__main__':
